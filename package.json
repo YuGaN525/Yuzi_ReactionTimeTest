@@ -1,0 +1,35 @@
+{
+  "name": "yuzi-reaction-time-test",
+  "version": "1.0.0",
+  "description": "5 轮人类反应力测试与自托管排行榜",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test"
+  },
+  "keywords": [
+    "reaction-time",
+    "human-benchmark",
+    "leaderboard",
+    "express",
+    "sqlite"
+  ],
+  "author": "YuGaN525 (https://github.com/YuGaN525)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YuGaN525/Yuzi_ReactionTimeTest.git"
+  },
+  "bugs": {
+    "url": "https://github.com/YuGaN525/Yuzi_ReactionTimeTest/issues"
+  },
+  "homepage": "https://github.com/YuGaN525/Yuzi_ReactionTimeTest#readme",
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

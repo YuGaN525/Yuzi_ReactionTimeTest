@@ -1,0 +1,226 @@
+# Yuzi Reaction Time Test
+
+**5 轮随机延迟的人类反应力测试，带自托管排行榜。**
+
+看到绿色，立即点击。记录平均反应、单轮最快与个人最佳，然后把成绩留在榜上。
+
+![Node](https://img.shields.io/badge/node-%E2%89%A522.5-c9ff4d?labelColor=11161e)
+![License](https://img.shields.io/badge/license-MIT-9aa5b2?labelColor=11161e)
+
+![Yuzi 反应力测试首页](docs/screenshot-home.png)
+
+## 功能
+
+- **5 轮反应测试**：随机等待 1.4–3.8 秒后亮起绿色；提前点击会被判为抢跑，本轮重来。
+- **完整结算**：本局平均、最快/最慢单轮、抢跑次数、评级与个人最佳。
+- **双排行榜**：按平均成绩或单轮最快排序，提交后显示名次和击败百分比。
+- **本地优先**：个人历史（最近 30 局）和昵称保存在 `localStorage`；服务器离线时测试仍可用。
+- **纯前端零构建**：HTML + CSS + 原生 JavaScript，不依赖框架或打包工具。
+- **服务端校验**：服务端重新计算平均与最快成绩，限制昵称和成绩范围，并按 IP 限流。
+- **可维护**：可选管理员令牌删除违规成绩；SQLite 单文件存储，备份简单。
+- **多端适配**：鼠标、触屏、空格键均可响应；支持移动端布局与 `prefers-reduced-motion`。
+
+## 界面预览
+
+![测试区域](docs/screenshot-test.png)
+
+![本局结算](docs/screenshot-result.png)
+
+![反应排行榜](docs/screenshot-leaderboard.png)
+
+## 快速开始
+
+需要 **Node.js 22.5 或更高版本**（后端使用内置 `node:sqlite`，无需编译原生模块）。
+
+```bash
+git clone https://github.com/YuGaN525/Yuzi_ReactionTimeTest.git
+cd Yuzi_ReactionTimeTest
+npm install
+npm start
+```
+
+打开 <http://localhost:3000>。
+
+开发时可以使用：
+
+```bash
+npm run dev   # node --watch，修改服务端文件后自动重启
+```
+
+数据库会自动创建在 `data/leaderboard.db`（已被 `.gitignore` 忽略）。
+
+### 不用服务器，直接打开前端
+
+直接打开 `public/index.html` 即可完成测试，个人成绩会保存在本地。排行榜此时处于「本地模式」，无法上传或读取线上成绩。
+
+要让一个独立托管的前端连接线上 API：
+
+1. 修改 `public/index.html` 中的 `<meta name="api-base" content="">`，例如填入 `https://api.example.com`。
+2. 在 API 服务器上设置 `CORS_ORIGINS=https://你的前端域名`。
+3. 如果前端所在服务器会下发 CSP，额外设置 `CSP_CONNECT_SRC=https://api.example.com`。
+
+## 部署
+
+### Docker Compose
+
+```bash
+docker compose up -d --build
+```
+
+数据保存在名为 `yuzi-data` 的 Docker 卷中。需要删除违规成绩时，先启用管理令牌：
+
+```bash
+ADMIN_TOKEN=替换成随机长字符串 docker compose up -d
+```
+
+### Docker CLI
+
+```bash
+docker build -t yuzi-reaction .
+docker run -d --name yuzi-reaction -p 3000:3000 \
+  -v yuzi-data:/app/data \
+  -e ADMIN_TOKEN=替换成随机长字符串 \
+  yuzi-reaction
+```
+
+### 反向代理与平台部署
+
+- 部署到 VPS、Railway、Render、Fly.io 等平台时，请为 `/app/data` 挂载持久化磁盘；否则容器重建后排行榜会丢失。
+- 反向代理后面运行时设置 `TRUST_PROXY=1`，并确保 `X-Forwarded-For` 正确传递，否则限流会把所有访客当作同一个 IP。
+- SQLite 适合单实例部署。不要同时运行多个副本共享同一个数据库文件。
+
+Nginx 反向代理示例：
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+## 配置
+
+所有配置通过环境变量传入，无配置文件。
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `PORT` | `3000` | HTTP 监听端口 |
+| `DATA_DIR` | `./data` | SQLite 数据目录，相对项目根目录解析 |
+| `ADMIN_TOKEN` | 空 | 设置后才启用 `DELETE /api/scores/:id` |
+| `TRUST_PROXY` | `0` | 反向代理后设为 `1`，用于获取真实客户端 IP |
+| `RATE_LIMIT_MAX` | `8` | 每个 IP 在限流窗口内允许的提交次数 |
+| `RATE_LIMIT_WINDOW_MS` | `600000` | 限流窗口（毫秒），默认 10 分钟 |
+| `CORS_ORIGINS` | 空 | 允许跨域的前端源，逗号分隔 |
+| `CSP_CONNECT_SRC` | 空 | 额外的 CSP `connect-src` 源，用于前后端分离 |
+
+限流计数保存在内存中，重启服务后会清零。
+
+## API
+
+### `GET /api/health`
+
+```json
+{ "ok": true, "total": 42, "uptime": 3600 }
+```
+
+### `GET /api/leaderboard?sort=avg&limit=50`
+
+- `sort`：`avg`（默认，平均成绩榜）或 `best`（单轮最快榜）。
+- `limit`：1–100，默认 50。
+
+```json
+{
+  "sort": "avg",
+  "limit": 50,
+  "total": 42,
+  "entries": [
+    {
+      "rank": 1,
+      "id": 12,
+      "name": "Yuzi",
+      "avgMs": 198,
+      "bestMs": 176,
+      "createdAt": "2026-10-25T09:00:00.000Z"
+    }
+  ]
+}
+```
+
+### `POST /api/scores`
+
+```bash
+curl -X POST http://localhost:3000/api/scores \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Yuzi","rounds":[214,198,231,220,205]}'
+```
+
+- `name`：1–16 个可见字符。
+- `rounds`：恰好 5 个数字，每轮 50–5000 ms。
+- 服务端重新计算平均值和最快值，忽略客户端传入的 `avgMs` / `bestMs`。
+
+成功返回 `201`，并附带服务器计算的 `rank`、`percentile`、`total`：
+
+```json
+{
+  "score": {
+    "id": 13,
+    "name": "Yuzi",
+    "avgMs": 214,
+    "bestMs": 198,
+    "rounds": [214, 198, 231, 220, 205],
+    "createdAt": "2026-10-25T09:05:00.000Z"
+  },
+  "rank": 3,
+  "percentile": 87,
+  "total": 42
+}
+```
+
+### `DELETE /api/scores/:id`
+
+需要请求头 `X-Admin-Token`。仅在服务器设置了 `ADMIN_TOKEN` 时可用，成功返回 `204`。用于清理违规昵称或明显作弊的成绩。
+
+```bash
+curl -X DELETE http://localhost:3000/api/scores/13 \
+  -H 'X-Admin-Token: 你的管理令牌'
+```
+
+## 测试
+
+```bash
+npm test
+```
+
+使用 Node.js 内置测试运行器，覆盖页面/健康检查、成绩校验、排序与排名、管理员删除和限流；已在 Node 22 与 Node 24 上验证通过。
+
+## 项目结构
+
+```text
+public/
+  index.html          页面结构
+  styles.css          视觉与响应式布局
+  app.js              测试状态机、本地存储、排行榜交互
+  favicon.svg
+ 404.html
+src/
+  app.js              Express 应用、校验、路由、限流
+  db.js               SQLite 初始化与成绩存储
+server.js             服务入口与配置
+test/api.test.js      API 集成测试
+Dockerfile
+compose.yaml
+```
+
+## 数据与公平性
+
+- 服务器只保存昵称、5 轮成绩、平均/最快成绩和时间戳；**不会把 IP 写入数据库**，IP 仅用于内存限流。
+- 昵称会公开显示，请提醒玩家不要使用真实姓名、联系方式等敏感信息。
+- 这是浏览器端的娱乐级反应力测试。显示器刷新率、输入设备延迟、页面渲染调度都会影响结果，不适用于医学或科研测量。
+- 服务器会复算成绩并校验范围，但无法阻止修改过的客户端或脚本模拟点击。对于公开榜单，建议设置 `ADMIN_TOKEN` 并定期清理异常成绩。
+
+## License
+
+[MIT](LICENSE) © 2026 YuGaN525

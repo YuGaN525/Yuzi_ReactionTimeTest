@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Yuzi 反应力测试 · 你的反应有多快？</title>
+  <meta name="description" content="5 轮随机延迟人类反应力测试，记录平均与最快成绩，挑战在线排行榜。支持鼠标、触屏与空格键。">
+  <meta name="theme-color" content="#07090c">
+  <meta name="color-scheme" content="dark">
+  <meta name="api-base" content="">
+  <meta property="og:title" content="Yuzi 反应力测试">
+  <meta property="og:description" content="看到绿色立即点击。5 轮反应力测试，看看你能击败多少玩家。">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <svg class="icon-sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-bolt" viewBox="0 0 24 24">
+      <path d="M13.2 2 4 13.4h5.8L9.3 22l9.7-12h-6.1L13.2 2Z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24">
+      <path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-arrow-up-right" viewBox="0 0 24 24">
+      <path d="M7 17 17 7M8 7h9v9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-github" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12 .7a11.3 11.3 0 0 0-3.6 22c.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.1.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.8 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0C15.2 5.2 16.2 5.5 16.2 5.5c.6 1.5.2 2.7.1 3 .7.8 1.2 1.8 1.2 3.1 0 4.5-2.7 5.5-5.3 5.8.4.4.8 1.1.8 2.2v3.3c0 .3.2.6.8.5A11.3 11.3 0 0 0 12 .7Z"/>
+    </symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24">
+      <path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" stroke-width="1.7"/>
+      <path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-target" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.7"/>
+      <circle cx="12" cy="12" r="4.6" fill="none" stroke="currentColor" stroke-width="1.7"/>
+      <circle cx="12" cy="12" r="1.3" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24">
+      <path d="M12 3 5 6v5c0 4.5 2.9 8.2 7 10 4.1-1.8 7-5.5 7-10V6l-7-3Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+      <path d="m9.2 12 1.9 1.9 3.8-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24">
+      <path d="M4 19V9m6 10V5m5 14v-7m5 7V8" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24">
+      <path d="m5 12.5 4.2 4.2L19 6.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+  </svg>
+
+  <a class="skip-link" href="#test">跳到测试</a>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="#top" aria-label="Yuzi 反应力测试首页">
+        <span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg></span>
+        <span class="brand-copy">
+          <span class="brand-name">YUZI</span>
+          <span class="brand-sub">REACTION LAB</span>
+        </span>
+      </a>
+
+      <nav class="site-nav" aria-label="主导航">
+        <a href="#test">测试</a>
+        <a href="#leaderboard">排行榜</a>
+        <a href="#guide">说明</a>
+      </nav>
+
+      <div class="header-actions">
+        <span class="conn" id="connState" data-state="checking">
+          <span class="conn-dot" aria-hidden="true"></span>
+          <span id="connLabel">连接中</span>
+        </span>
+        <a class="icon-link" href="https://github.com/YuGaN525/Yuzi_ReactionTimeTest" target="_blank" rel="noopener noreferrer" aria-label="查看 GitHub 仓库">
+          <svg class="icon" aria-hidden="true"><use href="#i-github"/></svg>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero" aria-labelledby="heroTitle">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span>HUMAN REACTION BENCHMARK</p>
+        <h1 id="heroTitle">你的反应，<br><span class="text-lime">有多快？</span></h1>
+        <p class="hero-lede">看到绿色，立即点击。5 轮随机延迟测试，记录你的平均反应与最快单轮，然后把自己送上排行榜。</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#test">
+            开始测试
+            <svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg>
+          </a>
+          <a class="btn btn-ghost" href="#leaderboard">查看排行榜</a>
+        </div>
+        <ul class="hero-facts">
+          <li><span id="heroTotal">—</span><small>累计参与</small></li>
+          <li><span>约 250<em>ms</em></span><small>人类平均</small></li>
+          <li><span>5 轮</span><small>取平均值</small></li>
+        </ul>
+      </div>
+
+      <div class="hero-visual" aria-hidden="true">
+        <div class="reticle">
+          <span class="reticle-ring ring-a"></span>
+          <span class="reticle-ring ring-b"></span>
+          <span class="reticle-ring ring-c"></span>
+          <span class="reticle-cross cross-x"></span>
+          <span class="reticle-cross cross-y"></span>
+          <span class="reticle-core"><svg class="icon"><use href="#i-bolt"/></svg></span>
+          <span class="reticle-tag">SIGNAL READY</span>
+        </div>
+        <div class="float-card float-a">
+          <span>PERSONAL BEST</span>
+          <strong id="heroPb">—</strong>
+        </div>
+        <div class="float-card float-b">
+          <span>FORMAT</span>
+          <strong>5<small>轮</small></strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="test" aria-labelledby="testTitle">
+      <div class="section-head">
+        <div>
+          <p class="section-index">01 / TEST</p>
+          <h2 id="testTitle">反应力测试</h2>
+        </div>
+        <p class="section-desc">随机等待，专注绿色信号。共 5 轮，取平均成绩。抢跑不计分，本轮重来。</p>
+      </div>
+
+      <div class="test-card">
+        <div class="test-topbar">
+          <div class="round-dots" id="roundDots" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <span class="round-label" id="roundLabel">等待开始</span>
+          <button class="text-btn" id="resetBtn" type="button" hidden>重置</button>
+        </div>
+
+        <div class="stage" id="stage" data-state="idle" role="button" tabindex="0" aria-label="开始反应力测试">
+          <div class="stage-chrome" aria-hidden="true">
+            <span>RT / LAB</span>
+            <span>SIGNAL · MANUAL</span>
+          </div>
+          <div class="stage-inner" id="stageInner">
+            <div class="stage-face stage-face--idle">
+              <span class="start-orb"><svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg></span>
+              <p class="stage-kicker">REACTION TEST · 5 ROUNDS</p>
+              <h3>准备好了吗？</h3>
+              <p class="stage-sub">点击任意位置开始，看到绿色立即反应</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="test-metrics">
+          <div class="metric">
+            <span class="metric-label">本局平均</span>
+            <strong class="metric-value" id="metricAvg"><span class="metric-empty">—</span></strong>
+          </div>
+          <div class="metric">
+            <span class="metric-label">最快单轮</span>
+            <strong class="metric-value" id="metricBest"><span class="metric-empty">—</span></strong>
+          </div>
+          <div class="metric">
+            <span class="metric-label">抢跑</span>
+            <strong class="metric-value" id="metricEarly">0<small>次</small></strong>
+          </div>
+          <div class="metric">
+            <span class="metric-label">个人最佳</span>
+            <strong class="metric-value" id="metricPb"><span class="metric-empty">—</span></strong>
+          </div>
+        </div>
+
+        <ol class="round-strip" id="roundStrip" aria-label="各轮成绩">
+          <li class="round-chip" data-round="1"><span class="round-chip-label">R1</span><span class="round-chip-value">—</span></li>
+          <li class="round-chip" data-round="2"><span class="round-chip-label">R2</span><span class="round-chip-value">—</span></li>
+          <li class="round-chip" data-round="3"><span class="round-chip-label">R3</span><span class="round-chip-value">—</span></li>
+          <li class="round-chip" data-round="4"><span class="round-chip-label">R4</span><span class="round-chip-value">—</span></li>
+          <li class="round-chip" data-round="5"><span class="round-chip-label">R5</span><span class="round-chip-value">—</span></li>
+        </ol>
+
+        <div class="test-foot">
+          <span><kbd>Space</kbd> 鼠标 · 触屏 · 空格均可响应</span>
+          <span>本局成绩自动保存在本地</span>
+        </div>
+      </div>
+
+      <section class="result-sheet" id="resultSheet" hidden aria-labelledby="resultTitle">
+        <div class="result-col">
+          <p class="eyebrow">SESSION RESULT</p>
+          <div class="result-heading">
+            <h3 id="resultTitle">本局结果</h3>
+            <span class="tier-chip" id="resultTier">—</span>
+          </div>
+          <div class="result-average">
+            <span id="resultAvg">—</span>
+            <span class="result-unit">ms</span>
+            <span class="result-avg-label">平均反应</span>
+          </div>
+          <p class="result-note" id="resultNote"></p>
+          <dl class="result-facts">
+            <div><dt>最快单轮</dt><dd id="resultBest">—</dd></div>
+            <div><dt>最慢单轮</dt><dd id="resultWorst">—</dd></div>
+            <div><dt>抢跑次数</dt><dd id="resultEarly">—</dd></div>
+          </dl>
+          <ol class="result-rounds" id="resultRounds" aria-label="本局各轮成绩"></ol>
+        </div>
+
+        <div class="result-col result-submit">
+          <p class="eyebrow">LEADERBOARD</p>
+          <h4>把成绩留在榜上</h4>
+          <p class="result-submit-copy">昵称将公开展示。提交时服务器会重新计算并校验成绩。</p>
+
+          <form class="submit-form" id="submitForm">
+            <label for="nickname">上榜昵称</label>
+            <div class="submit-row">
+              <input id="nickname" name="nickname" type="text" maxlength="16" placeholder="输入昵称（1–16 字符）" autocomplete="nickname" spellcheck="false" required>
+              <button class="btn btn-primary" type="submit" id="submitBtn">
+                <span id="submitBtnLabel">提交到排行榜</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-arrow-up-right"/></svg>
+              </button>
+            </div>
+            <p class="form-note" id="submitNote">昵称会公开显示，其他信息仅保存在本地。</p>
+          </form>
+
+          <div class="submit-success" id="submitSuccess" hidden aria-live="polite">
+            <span class="success-icon"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span>
+            <div>
+              <strong>成绩已上榜</strong>
+              <p id="submitResultText"></p>
+              <a class="link" href="#leaderboard">查看排行榜 <svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></a>
+            </div>
+          </div>
+
+          <div class="result-actions">
+            <button class="btn btn-quiet" type="button" id="retryBtn">再测一次</button>
+            <a class="link muted-link" href="#leaderboard">跳过，去看排行榜</a>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="section" id="leaderboard" aria-labelledby="boardTitle">
+      <div class="section-head">
+        <div>
+          <p class="section-index">02 / LEADERBOARD</p>
+          <h2 id="boardTitle">反应排行榜</h2>
+        </div>
+        <p class="section-desc">平均成绩越低越靠前。榜单展示前 50 名，只收录完整的 5 轮成绩。</p>
+      </div>
+
+      <div class="board-card">
+        <div class="board-toolbar">
+          <div class="segmented" role="group" aria-label="排行榜排序">
+            <button class="seg-btn is-active" type="button" data-sort="avg" aria-pressed="true">平均成绩</button>
+            <button class="seg-btn" type="button" data-sort="best" aria-pressed="false">单轮最快</button>
+          </div>
+          <div class="board-tools">
+            <span class="board-count" id="boardCount">—</span>
+            <button class="icon-btn" type="button" id="refreshBtn" aria-label="刷新排行榜">
+              <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="board-body" id="boardBody" aria-live="polite">
+          <div class="board-skeleton" aria-label="正在加载排行榜">
+            <div class="skeleton-row"><span></span><span></span><span></span><span></span></div>
+            <div class="skeleton-row"><span></span><span></span><span></span><span></span></div>
+            <div class="skeleton-row"><span></span><span></span><span></span><span></span></div>
+            <div class="skeleton-row"><span></span><span></span><span></span><span></span></div>
+            <div class="skeleton-row"><span></span><span></span><span></span><span></span></div>
+          </div>
+        </div>
+
+        <div class="board-foot">
+          <span>成绩按毫秒计算，越低越好</span>
+          <span>服务端复核 · 无需注册</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="guide" aria-labelledby="guideTitle">
+      <div class="section-head">
+        <div>
+          <p class="section-index">03 / HOW IT WORKS</p>
+          <h2 id="guideTitle">测试说明</h2>
+        </div>
+        <p class="section-desc">这是一个轻量的反应力基准测试，适合朋友之间比拼，也可用于日常状态参考。</p>
+      </div>
+
+      <div class="guide-grid">
+        <article class="guide-card">
+          <span class="guide-icon"><svg class="icon" aria-hidden="true"><use href="#i-target"/></svg></span>
+          <h3>怎么测</h3>
+          <p>开始后信号区保持暗色，绿色出现的瞬间立刻响应。提前点击算抢跑，本轮重新开始。</p>
+          <ul class="guide-list">
+            <li>随机等待 1.4–3.8 秒，避免预判</li>
+            <li>共 5 轮，取平均成绩</li>
+            <li>鼠标、触屏、空格键均可</li>
+          </ul>
+        </article>
+
+        <article class="guide-card">
+          <span class="guide-icon"><svg class="icon" aria-hidden="true"><use href="#i-chart"/></svg></span>
+          <h3>怎么计分</h3>
+          <p>平均成绩决定主榜排名，单轮最快单独排序。成绩上传后由服务器重新计算，避免本地篡改。</p>
+          <ul class="guide-list">
+            <li>平均榜：5 轮成绩的算术平均</li>
+            <li>最快榜：单轮最低用时</li>
+            <li>每次提交仅记录一局成绩</li>
+          </ul>
+        </article>
+
+        <article class="guide-card">
+          <span class="guide-icon"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></span>
+          <h3>关于误差</h3>
+          <p>显示器刷新率、输入设备延迟和浏览器调度都会影响结果。请使用同一设备横向比较。</p>
+          <ul class="guide-list">
+            <li>保持页面在前台，切页本轮作废</li>
+            <li>不要预判颜色变化</li>
+            <li>成绩仅供娱乐与训练参考</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <span class="brand-mark brand-mark--small"><svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg></span>
+        <div>
+          <strong>YUZI REACTION LAB</strong>
+          <p>为玩家而做的反应力实验室。</p>
+        </div>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/YuGaN525/Yuzi_ReactionTimeTest" target="_blank" rel="noopener noreferrer">GitHub <svg class="icon" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a>
+        <span>MIT License</span>
+        <span>© <span id="year">2026</span> YUZI</span>
+      </div>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="sr-only" id="announcer" aria-live="polite"></div>
+
+  <noscript>
+    <div class="noscript">这个测试需要启用 JavaScript。请在浏览器设置中开启后刷新页面。</div>
+  </noscript>
+</body>
+</html>
