@@ -87,7 +87,7 @@ function corsHeaders(origins) {
   };
 }
 
-function createSubmissionLimiter({ max, windowMs }) {
+function createSubmissionLimiter({ max, windowMs, maxEntries = 10_000 }) {
   const hits = new Map();
   const sweeper = setInterval(() => {
     const now = Date.now();
@@ -103,7 +103,16 @@ function createSubmissionLimiter({ max, windowMs }) {
     const record = hits.get(key);
 
     if (!record || record.resetAt <= now) {
-      if (hits.size > 10_000) hits.clear();
+      if (!record && hits.size >= maxEntries) {
+        for (const [ip, entry] of hits) {
+          if (entry.resetAt <= now) hits.delete(ip);
+        }
+        // Preserve active counters when the bounded registry is full.
+        if (hits.size >= maxEntries) {
+          res.setHeader('Retry-After', '60');
+          return res.status(503).json({ error: '服务器繁忙，请稍后重试。' });
+        }
+      }
       hits.set(key, { count: 1, resetAt: now + windowMs });
       return next();
     }

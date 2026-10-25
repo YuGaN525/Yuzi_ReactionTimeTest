@@ -17,6 +17,7 @@ async function startApp(overrides = {}) {
     db,
     publicDir: PUBLIC_DIR,
     adminToken: overrides.adminToken ?? 'test-secret',
+    trustProxy: overrides.trustProxy ?? false,
     rateLimit: overrides.rateLimit ?? { max: 1000, windowMs: 60_000 },
   });
   const server = await new Promise((resolve) => {
@@ -196,4 +197,21 @@ test('rate limits repeated submissions', async (t) => {
   assert.equal(second.status, 429);
   assert.ok(Number(second.headers.get('retry-after')) >= 1);
   assert.match((await json(second)).error, /提交过于频繁/);
+});
+
+test('a full IP registry does not reset active submission limits', async (t) => {
+  const fixture = await startApp({ trustProxy: 1, rateLimit: { max: 1, windowMs: 60_000, maxEntries: 2 } });
+  t.after(() => fixture.close());
+  const post = (ip) => fetch(`${fixture.url}/api/scores`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip },
+    body: JSON.stringify({ name: '容量测试', rounds: [210, 220, 230, 240, 250] }),
+  });
+  assert.equal((await post('192.0.2.1')).status, 201);
+  assert.equal((await post('192.0.2.2')).status, 201);
+  const overflow = await post('192.0.2.3');
+  assert.equal(overflow.status, 503);
+  assert.equal(overflow.headers.get('retry-after'), '60');
+  assert.equal((await post('192.0.2.1')).status, 429);
+  assert.equal((await json(await fetch(`${fixture.url}/api/leaderboard`))).total, 2);
 });
