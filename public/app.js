@@ -4,15 +4,12 @@
   const API_BASE = (document.querySelector('meta[name="api-base"]')?.getAttribute('content') || '')
     .trim()
     .replace(/\/+$/, '');
-  const apiUrl = (path) => `${API_BASE}${path}`;
+  const API_PREFIX = document.querySelector('meta[name="api-prefix"]')?.content || '/api';
+  const apiUrl = (path) => `${API_BASE}${API_PREFIX}${path.replace(/^\/api/, '')}`;
 
   const TOTAL_ROUNDS = 5;
   const WAIT_MIN_MS = 1400;
   const WAIT_MAX_MS = 3800;
-  const RESULT_PAUSE_MS = 1100;
-  const NEXT_ROUND_DELAY_MS = 1000;
-  const EARLY_RESTART_DELAY_MS = 1500;
-  const RESUME_DELAY_MS = 900;
   const REQUEST_TIMEOUT_MS = 8000;
   const BOARD_LIMIT = 50;
   const STORAGE_KEYS = {
@@ -41,6 +38,7 @@
   const numberFormat = new Intl.NumberFormat('zh-CN');
 
   const els = {
+    nextBtn: document.getElementById('nextRoundBtn'),
     stage: document.getElementById('stage'),
     stageInner: document.getElementById('stageInner'),
     roundDots: [...document.querySelectorAll('#roundDots span')],
@@ -82,12 +80,12 @@
   };
 
   const state = {
+    signalFrame: null,
     phase: 'idle',
     rounds: [],
     falseStarts: 0,
     readyAt: 0,
     timers: new Set(),
-    resumePending: false,
     testVisible: false,
     boardSort: 'avg',
     boardEntries: [],
@@ -120,6 +118,8 @@
   function clearTimers() {
     for (const timer of state.timers) window.clearTimeout(timer);
     state.timers.clear();
+    if (state.signalFrame !== null) cancelAnimationFrame(state.signalFrame);
+    state.signalFrame = null;
   }
 
   function announce(message) {
@@ -271,6 +271,8 @@
 
     const sessionInProgress = !['idle', 'complete'].includes(state.phase);
     els.resetBtn.hidden = !sessionInProgress;
+    els.nextBtn.hidden = !['result', 'early', 'paused'].includes(state.phase) || state.rounds.length >= TOTAL_ROUNDS;
+    els.nextBtn.textContent = state.phase === 'result' ? `开始第 ${state.rounds.length + 1} 轮` : state.phase === 'early' ? '重试本轮' : '继续本轮';
   }
 
   function setStage(phase, html, ariaLabel) {
@@ -333,7 +335,7 @@
         <div class="stage-face stage-face--result">
           <p class="stage-kicker">ROUND ${roundNumber} / ${TOTAL_ROUNDS}</p>
           <p class="stage-ms">${ms}<small>ms</small></p>
-          <p class="stage-sub">${quickComment(ms)}</p>
+          <p class="stage-sub">${quickComment(ms)} · 点击下方按钮开始下一轮</p>
         </div>
       `,
       `第 ${roundNumber} 轮成绩 ${ms} 毫秒`,
@@ -347,10 +349,10 @@
         <div class="stage-face stage-face--early">
           <p class="stage-kicker">FALSE START</p>
           <h3>太早了</h3>
-          <p class="stage-sub">等到绿色出现再点击 · 本轮重新开始</p>
+          <p class="stage-sub">等到绿色出现再点击 · 点击下方按钮重试本轮</p>
         </div>
       `,
-      '抢跑，本轮作废，即将重新开始',
+      '抢跑，本轮作废，点击按钮重试',
     );
   }
 
@@ -362,10 +364,10 @@
           <span class="paused-icon"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg></span>
           <p class="stage-kicker">PAUSED</p>
           <h3>测试暂停</h3>
-          <p class="stage-sub">检测到页面切换，本轮作废。返回后会自动继续</p>
+          <p class="stage-sub">检测到页面切换，本轮作废。点击下方按钮继续</p>
         </div>
       `,
-      '测试已暂停，返回页面后继续',
+      '测试已暂停，点击按钮继续本轮',
     );
   }
 
@@ -401,9 +403,13 @@
         renderPaused();
         return;
       }
-      state.readyAt = performance.now();
-      renderReady();
-      announce('绿色出现，立即点击。');
+      state.signalFrame = requestAnimationFrame(() => {
+        state.signalFrame = null;
+        if (state.phase !== 'waiting' || document.hidden) return;
+        renderReady();
+        state.readyAt = performance.now();
+        announce('绿色出现，立即点击。');
+      });
     }, delay);
   }
 
@@ -414,7 +420,6 @@
     state.readyAt = 0;
     state.result = null;
     state.submitted = false;
-    state.resumePending = false;
     hideResultSheet();
     updateMetrics();
     beginRound();
@@ -427,8 +432,9 @@
     }
     if (state.phase !== 'ready') return;
 
+    const respondedAt = performance.now();
     clearTimers();
-    const ms = Math.max(1, Math.round(performance.now() - state.readyAt));
+    const ms = Math.max(1, Math.round(respondedAt - state.readyAt));
     state.readyAt = 0;
     state.rounds.push(ms);
     renderRoundResult(ms);
@@ -436,9 +442,7 @@
     announce(`第 ${state.rounds.length} 轮，${ms} 毫秒。`);
 
     if (state.rounds.length >= TOTAL_ROUNDS) {
-      later(finishSession, RESULT_PAUSE_MS);
-    } else {
-      later(beginRound, NEXT_ROUND_DELAY_MS);
+      finishSession();
     }
   }
 
@@ -447,8 +451,8 @@
     state.falseStarts += 1;
     renderEarly();
     updateMetrics();
-    announce('点击太早了，本轮作废，即将重新开始。');
-    later(beginRound, EARLY_RESTART_DELAY_MS);
+    state.readyAt = 0;
+    announce('点击太早了，本轮作废，请点击重试本轮。');
   }
 
   function finishSession() {
@@ -471,7 +475,6 @@
       falseStarts: state.falseStarts,
     };
     state.submitted = false;
-    state.resumePending = false;
 
     renderComplete(avgMs, tier);
     saveSession(state.result);
@@ -551,7 +554,6 @@
     state.readyAt = 0;
     state.result = null;
     state.submitted = false;
-    state.resumePending = false;
     hideResultSheet();
     renderIdle();
     updateMetrics();
@@ -635,13 +637,13 @@
 
       if (!response.ok) {
         const message =
-          payload && typeof payload.error === 'string'
-            ? payload.error
+          payload && typeof (payload.error || payload.message) === 'string'
+            ? (payload.error || payload.message)
             : `请求失败（${response.status}）`;
         throw new HttpError(message, response.status);
       }
       if (payload === null) throw new Error('服务器返回了无法解析的数据。');
-      return payload;
+      return payload && payload.success === true ? payload.data : payload;
     } catch (error) {
       if (error.name === 'AbortError') throw new Error('请求超时，请检查网络连接。');
       if (error instanceof HttpError) throw error;
@@ -908,7 +910,7 @@
   }
 
   els.stage.addEventListener('pointerdown', (event) => {
-    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
     if (state.phase === 'idle') {
       startSession();
       return;
@@ -942,23 +944,21 @@
     }
   });
 
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      if (state.phase === 'waiting' || state.phase === 'ready') {
-        clearTimers();
-        renderPaused();
-        announce('检测到页面切换，本轮已作废。返回后继续。');
-      }
-      return;
-    }
-
-    if (state.phase === 'paused' && !state.resumePending) {
-      state.resumePending = true;
-      announce('页面已返回，即将继续测试。');
-      later(() => {
-        state.resumePending = false;
-        if (state.phase === 'paused') beginRound();
-      }, RESUME_DELAY_MS);
+  function pauseActiveRound() {
+    if (state.phase !== 'waiting' && state.phase !== 'ready') return;
+    clearTimers();
+    state.readyAt = 0;
+    renderPaused();
+    announce('本轮已暂停，请手动点击继续本轮。');
+  }
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pauseActiveRound(); });
+  window.addEventListener('blur', pauseActiveRound);
+  window.addEventListener('pagehide', () => { pauseActiveRound(); clearTimers(); });
+  els.nextBtn.addEventListener('click', () => {
+    if (['result', 'early', 'paused'].includes(state.phase)) {
+      els.stage.scrollIntoView({ block: 'center', behavior: 'instant' });
+      els.stage.focus({ preventScroll: true });
+      beginRound();
     }
   });
 

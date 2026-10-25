@@ -4,14 +4,14 @@
 
 看到绿色，立即点击。记录平均反应、单轮最快与个人最佳，然后把成绩留在榜上。
 
-![Node](https://img.shields.io/badge/node-%E2%89%A522.5-c9ff4d?labelColor=11161e)
+![Node](https://img.shields.io/badge/node-%E2%89%A522.5-d4af37?labelColor=11161e)
 ![License](https://img.shields.io/badge/license-MIT-9aa5b2?labelColor=11161e)
 
 ![Yuzi 反应力测试首页](docs/screenshot-home.png)
 
 ## 功能
 
-- **5 轮反应测试**：随机等待 1.4–3.8 秒后亮起绿色；提前点击会被判为抢跑，本轮重来。
+- **5 轮反应测试**：随机等待 1.4–3.8 秒后亮起绿色；提前点击会被判为抢跑；出成绩、抢跑或页面切换后均需手动点击按钮再开始，不自动连测。
 - **完整结算**：本局平均、最快/最慢单轮、抢跑次数、评级与个人最佳。
 - **双排行榜**：按平均成绩或单轮最快排序，提交后显示名次和击败百分比。
 - **本地优先**：个人历史（最近 30 局）和昵称保存在 `localStorage`；服务器离线时测试仍可用。
@@ -224,3 +224,12 @@ compose.yaml
 ## License
 
 [MIT](LICENSE) © 2026 YuGaN525
+
+## 2026-10-25：手动轮次与 Yuz1 S0ft 主题
+
+- 每个有效结果后停留在成绩页，点击「开始第 n 轮」才再次随机等待；抢跑点击「重试本轮」，失焦/切换页面点击「继续本轮」。第五轮结算后不会自动开新局。
+- 绿灯在 requestAnimationFrame 中呈现并取 performance.now 时间戳；信号区不做颜色渐变或淡入。重置/页面离开会取消待执行的计时与信号帧，多点触屏与键盘长按不会重复触发。
+- 与主项目一致的黑金（#D4AF37）/纸白浅色、字号、圆角与品牌；主题在本机保存。保留鼠标、触屏、键盘、个人历史与原排行榜。
+- 支持同源嵌入：`?embed=1` 隐藏独立外壳；`meta api-prefix` 可设置网站代理前缀；标准Yuzibei响应自动解包。嵌入高度消息校验同源，主题通过同源storage事件同步。独立服务仍保持禁止跨站iframe的CSP，主站使用静态副本嵌入，不放宽该限制。
+
+浏览器回归：安装可选Playwright后，在**临时数据目录的本地测试服务**上运行 `node tools/check-browser.cjs`。可设 `REACTION_TEST_URL=http://127.0.0.1:3001`、`BROWSER_CHANNEL=msedge`；独立工具环境可通过 `PLAYWRIGHT_MODULE_PATH` 指定模块路径。检查五轮手动推进、抢跑、暂停、清理、键盘长按、触屏、排行榜真实提交及四档屏宽。后端仍用 `npm test`。

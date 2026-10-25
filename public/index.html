@@ -3,15 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Yuzi 反应力测试 · 你的反应有多快？</title>
+  <title>反应力测试 · Yuz1 S0ft</title>
   <meta name="description" content="5 轮随机延迟人类反应力测试，记录平均与最快成绩，挑战在线排行榜。支持鼠标、触屏与空格键。">
   <meta name="theme-color" content="#07090c">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="dark light">
+  <meta name="api-prefix" content="/api">
   <meta name="api-base" content="">
   <meta property="og:title" content="Yuzi 反应力测试">
   <meta property="og:description" content="看到绿色立即点击。5 轮反应力测试，看看你能击败多少玩家。">
   <meta property="og:type" content="website">
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <script src="./theme.js"></script>
   <link rel="stylesheet" href="./styles.css">
   <script src="./app.js" defer></script>
 </head>
@@ -61,7 +63,7 @@
       <a class="brand" href="#top" aria-label="Yuzi 反应力测试首页">
         <span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg></span>
         <span class="brand-copy">
-          <span class="brand-name">YUZI</span>
+          <span class="brand-name">Yuz1 S0ft</span>
           <span class="brand-sub">REACTION LAB</span>
         </span>
       </a>
@@ -73,6 +75,7 @@
       </nav>
 
       <div class="header-actions">
+        <button id="themeBtn" class="text-btn" type="button" aria-label="切换浅色模式">浅色</button>
         <span class="conn" id="connState" data-state="checking">
           <span class="conn-dot" aria-hidden="true"></span>
           <span id="connLabel">连接中</span>
@@ -131,7 +134,7 @@
           <p class="section-index">01 / TEST</p>
           <h2 id="testTitle">反应力测试</h2>
         </div>
-        <p class="section-desc">随机等待，专注绿色信号。共 5 轮，取平均成绩。抢跑不计分，本轮重来。</p>
+        <p class="section-desc">随机等待，专注绿色信号。共 5 轮，取平均成绩。抢跑不计分；每轮结束后，手动开始下一轮。</p>
       </div>
 
       <div class="test-card">
@@ -158,6 +161,7 @@
           </div>
         </div>
 
+        <div class="manual-actions"><button class="btn btn-primary" type="button" id="nextRoundBtn" hidden>开始下一轮</button><span>每轮结束后手动开始 · 抢跑不计分</span></div>
         <div class="test-metrics">
           <div class="metric">
             <span class="metric-label">本局平均</span>
@@ -299,7 +303,7 @@
         <article class="guide-card">
           <span class="guide-icon"><svg class="icon" aria-hidden="true"><use href="#i-target"/></svg></span>
           <h3>怎么测</h3>
-          <p>开始后信号区保持暗色，绿色出现的瞬间立刻响应。提前点击算抢跑，本轮重新开始。</p>
+          <p>开始后信号区保持暗色，绿色出现的瞬间立刻响应。提前点击算抢跑，点击重试按钮后再开始本轮。</p>
           <ul class="guide-list">
             <li>随机等待 1.4–3.8 秒，避免预判</li>
             <li>共 5 轮，取平均成绩</li>
@@ -337,14 +341,14 @@
       <div class="footer-brand">
         <span class="brand-mark brand-mark--small"><svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg></span>
         <div>
-          <strong>YUZI REACTION LAB</strong>
+          <strong>Yuz1 S0ft / REACTION LAB</strong>
           <p>为玩家而做的反应力实验室。</p>
         </div>
       </div>
       <div class="footer-links">
         <a href="https://github.com/YuGaN525/Yuzi_ReactionTimeTest" target="_blank" rel="noopener noreferrer">GitHub <svg class="icon" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a>
         <span>MIT License</span>
-        <span>© <span id="year">2026</span> YUZI</span>
+        <span>© <span id="year">2026</span> Yuz1 S0ft</span>
       </div>
     </div>
   </footer>
