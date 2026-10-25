@@ -15,25 +15,26 @@ if (!['127.0.0.1', 'localhost', '[::1]'].includes(new URL(url).hostname)) throw 
     await page.locator('#connState[data-state=online]').waitFor();
     await page.clock.install({ time: new Date('2026-10-25T00:00:00Z') });
     await page.clock.pauseAt(new Date('2026-10-25T00:00:01Z'));
-    const stage = page.locator('#stage'), next = page.locator('#nextRoundBtn');
+    const stage = page.locator('#stage'), next = stage;
     const state = () => stage.getAttribute('data-state');
     await stage.click({ force: true }); assert.equal(await state(), 'waiting');
     await stage.click({ force: true }); assert.equal(await state(), 'early');
     await page.clock.runFor(10000); assert.equal(await state(), 'early');
-    assert.match(await next.textContent(), /重试本轮/);
+    assert.match(await stage.textContent(), /重试本轮/);
     await next.click({ force: true }); await page.clock.runFor(1600);
     assert.equal(await state(), 'ready');
     assert.equal(await stage.evaluate(e => getComputedStyle(e).transitionDuration), '0s');
     await page.clock.runFor(200); await stage.click({ force: true });
     assert.equal(await state(), 'result'); await page.clock.runFor(15000); assert.equal(await state(), 'result');
-    await stage.dblclick({ force: true }); assert.equal(await state(), 'result');
+    assert.match(await stage.locator('.stage-progress').textContent(), /1\/5/);
     for (let round = 2; round <= 5; round++) {
-      assert.match(await next.textContent(), new RegExp(String(round)));
+      assert.match(await stage.locator('.stage-progress').textContent(), new RegExp(String(round - 1) + '/5'));
       await next.click({ force: true }); await page.clock.runFor(1600); assert.equal(await state(), 'ready');
       await page.clock.runFor(200); await stage.click({ force: true });
       assert.equal(await state(), round === 5 ? 'complete' : 'result');
     }
-    assert.equal(await next.isVisible(), false);
+    assert.match(await stage.locator('.stage-progress').textContent(), /5\/5/);
+    assert.equal(await page.locator('#nextRoundBtn').count(), 0);
     assert.equal(await page.locator('#resultSheet').isVisible(), true);
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('yuzi-rt.history.v1')).length), 1);
     await page.locator('#nickname').fill('BrowserCheck');
@@ -69,11 +70,11 @@ if (!['127.0.0.1', 'localhost', '[::1]'].includes(new URL(url).hostname)) throw 
     await touch.locator('#stage').tap(); await touch.locator('#stage').tap();
     assert.equal(await touch.locator('#stage').getAttribute('data-state'), 'early');
     await touch.clock.runFor(10000); assert.equal(await touch.locator('#stage').getAttribute('data-state'), 'early');
-    await touch.locator('#nextRoundBtn').tap(); await touch.clock.runFor(1600); await touch.clock.runFor(200); await touch.locator('#stage').tap();
+    await touch.locator('#stage').tap(); await touch.clock.runFor(1600); await touch.clock.runFor(200); await touch.locator('#stage').tap();
     assert.equal(await touch.locator('#stage').getAttribute('data-state'), 'result');
     await touch.clock.runFor(10000); assert.equal(await touch.locator('#stage').getAttribute('data-state'), 'result');
     await mobile.close();
     assert.deepEqual(errors, []);
-    console.log('PASS manual five rounds, early retry, no auto advance/double-click restart, local history, real leaderboard submission, pause/reset cleanup, keyboard, light theme and four viewports');
+    console.log('PASS manual five rounds, early retry, same large-button continuation and n/5 counter, local history, real leaderboard submission, pause/reset cleanup, keyboard, light theme and four viewports');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exit(1); });

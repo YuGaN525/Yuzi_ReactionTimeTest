@@ -14,7 +14,7 @@ const MAX_LIMIT = 100;
 
 const UNSAFE_NAME_CHARS = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff<>]/g;
 
-function cleanName(value) {
+function cleanName(value, maxLength = MAX_NAME_LENGTH) {
   if (typeof value !== 'string') return null;
   const name = value
     .normalize('NFKC')
@@ -22,7 +22,7 @@ function cleanName(value) {
     .replace(/\s+/g, ' ')
     .trim();
   const length = Array.from(name).length;
-  if (length < 1 || length > MAX_NAME_LENGTH) return null;
+  if (length < 1 || length > maxLength) return null;
   return name;
 }
 
@@ -131,13 +131,17 @@ export function createApp({
   db,
   publicDir,
   adminToken = '',
+  websiteKey = '',
+  requireAccount = false,
   trustProxy = false,
   corsOrigins = [],
   extraConnectSrc = [],
   rateLimit = { max: 8, windowMs: 10 * 60 * 1000 },
 }) {
   const app = express();
-  const store = createScoreStore(db);
+  if ((requireAccount || websiteKey) && websiteKey.length < 32) throw new Error('WEBSITE_KEY must contain at least 32 characters');
+  const accountMode = requireAccount || !!websiteKey;
+  const store = createScoreStore(db, accountMode);
   const submissionLimiter = createSubmissionLimiter(rateLimit);
 
   app.disable('x-powered-by');
@@ -173,8 +177,15 @@ export function createApp({
     });
   });
 
-  app.post('/api/scores', submissionLimiter, (req, res) => {
-    const name = cleanName(req.body?.name);
+  app.post('/api/scores', (req, res, next) => {
+    if (accountMode && !safeTokenEqual(req.get('x-website-key'), websiteKey)) return res.status(403).json({ error: '请登录网站后上传成绩。' });
+    next();
+  }, submissionLimiter, (req, res) => {
+    const account = accountMode ? req.body?.account : null;
+    const submissionId = accountMode ? req.body?.submissionId : null;
+    if (accountMode && (!account || !/^[0-9a-f-]{36}$/i.test(account.id ?? '') || !/^\/players\/(?:[0-9]+|[0-9a-f-]{36})$/i.test(account.profilePath ?? '') || !/^[0-9a-f-]{36}$/i.test(submissionId ?? ''))) return res.status(400).json({ error: '账号或测试标识无效。' });
+    if (account?.avatarUrl && (!/^\/uploads\/[A-Za-z0-9/_.-]+$/.test(account.avatarUrl) || account.avatarUrl.includes('..'))) account.avatarUrl = null;
+    const name = cleanName(accountMode ? account.name : req.body?.name, accountMode ? 64 : MAX_NAME_LENGTH);
     if (!name) {
       return res.status(400).json({ error: '昵称需为 1–16 个可见字符。' });
     }
@@ -187,20 +198,24 @@ export function createApp({
     const createdAt = new Date().toISOString();
     const saved = store.add({
       name,
+      account,
+      submissionId,
       rounds: validated.rounds,
       avgMs: validated.avgMs,
       bestMs: validated.bestMs,
       createdAt,
     });
 
-    res.status(201).json({
+    res.status(saved.replayed ? 200 : 201).json({
       score: {
         id: saved.id,
         name,
         avgMs: validated.avgMs,
         bestMs: validated.bestMs,
         rounds: validated.rounds,
-        createdAt,
+        createdAt: saved.createdAt,
+        profilePath: account?.profilePath ?? null,
+        avatarUrl: account?.avatarUrl ?? null,
       },
       rank: saved.rank,
       percentile: saved.percentile,
@@ -254,6 +269,7 @@ export function createApp({
     if (error instanceof SyntaxError && 'body' in error) {
       return res.status(400).json({ error: '请求格式无效。' });
     }
+    if (error?.status === 409) return res.status(409).json({ error: error.message });
     console.error(error);
     return res.status(500).json({ error: '服务器内部错误。' });
   });

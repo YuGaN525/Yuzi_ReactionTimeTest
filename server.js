@@ -25,6 +25,8 @@ const app = createApp({
   db,
   publicDir: path.join(ROOT, 'public'),
   adminToken,
+  websiteKey: process.env.WEBSITE_KEY ?? '',
+  requireAccount: process.env.REQUIRE_ACCOUNT === '1',
   trustProxy,
   corsOrigins,
   extraConnectSrc,

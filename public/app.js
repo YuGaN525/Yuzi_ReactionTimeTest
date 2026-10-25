@@ -7,6 +7,32 @@
   const API_PREFIX = document.querySelector('meta[name="api-prefix"]')?.content || '/api';
   const apiUrl = (path) => `${API_BASE}${API_PREFIX}${path.replace(/^\/api/, '')}`;
 
+  const WEBSITE_MODE = API_PREFIX === '/api/tools/reaction';
+  let account = null;
+  const submissions = new Map();
+  function parentRequest(result) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { submissions.delete(result.submissionId); reject(new Error('上传超时，可点击重试；重复提交不会重复上榜。')); }, 20000);
+      submissions.set(result.submissionId, { resolve, reject, timer });
+      parent.postMessage({ type: 'yuz1-reaction-submit', submissionId: result.submissionId, rounds: result.rounds }, location.origin);
+    });
+  }
+  window.addEventListener('message', event => {
+    if (!WEBSITE_MODE || event.origin !== location.origin || event.source !== parent) return;
+    if (event.data?.type === 'yuz1-reaction-account') {
+      account = event.data.account || null;
+      els.nickname.closest('.submit-row').previousElementSibling.hidden = true;
+      els.nickname.hidden = true; els.nickname.required = false;
+      updateSubmitNote();
+      if (account && state.result && !state.submitted && !els.submitBtn.disabled) void handleSubmit({ preventDefault() {} });
+    }
+    if (event.data?.type === 'yuz1-reaction-submitted') {
+      const pending = submissions.get(event.data.submissionId);
+      if (!pending) return;
+      submissions.delete(event.data.submissionId); clearTimeout(pending.timer);
+      event.data.success ? pending.resolve(event.data.data) : pending.reject(new HttpError(event.data.message || '上传失败，请重试。', event.data.status || 503));
+    }
+  });
   const TOTAL_ROUNDS = 5;
   const WAIT_MIN_MS = 1400;
   const WAIT_MAX_MS = 3800;
@@ -38,7 +64,6 @@
   const numberFormat = new Intl.NumberFormat('zh-CN');
 
   const els = {
-    nextBtn: document.getElementById('nextRoundBtn'),
     stage: document.getElementById('stage'),
     stageInner: document.getElementById('stageInner'),
     roundDots: [...document.querySelectorAll('#roundDots span')],
@@ -271,8 +296,6 @@
 
     const sessionInProgress = !['idle', 'complete'].includes(state.phase);
     els.resetBtn.hidden = !sessionInProgress;
-    els.nextBtn.hidden = !['result', 'early', 'paused'].includes(state.phase) || state.rounds.length >= TOTAL_ROUNDS;
-    els.nextBtn.textContent = state.phase === 'result' ? `开始第 ${state.rounds.length + 1} 轮` : state.phase === 'early' ? '重试本轮' : '继续本轮';
   }
 
   function setStage(phase, html, ariaLabel) {
@@ -335,7 +358,8 @@
         <div class="stage-face stage-face--result">
           <p class="stage-kicker">ROUND ${roundNumber} / ${TOTAL_ROUNDS}</p>
           <p class="stage-ms">${ms}<small>ms</small></p>
-          <p class="stage-sub">${quickComment(ms)} · 点击下方按钮开始下一轮</p>
+          <p class="stage-progress">当前 ${roundNumber}/${TOTAL_ROUNDS} 次</p>
+          <p class="stage-sub">${quickComment(ms)} · 点击此区域开始下一轮</p>
         </div>
       `,
       `第 ${roundNumber} 轮成绩 ${ms} 毫秒`,
@@ -349,7 +373,7 @@
         <div class="stage-face stage-face--early">
           <p class="stage-kicker">FALSE START</p>
           <h3>太早了</h3>
-          <p class="stage-sub">等到绿色出现再点击 · 点击下方按钮重试本轮</p>
+          <p class="stage-sub">等到绿色出现再点击 · 点击此区域重试本轮</p>
         </div>
       `,
       '抢跑，本轮作废，点击按钮重试',
@@ -364,7 +388,7 @@
           <span class="paused-icon"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg></span>
           <p class="stage-kicker">PAUSED</p>
           <h3>测试暂停</h3>
-          <p class="stage-sub">检测到页面切换，本轮作废。点击下方按钮继续</p>
+          <p class="stage-sub">检测到页面切换，本轮作废。点击此区域继续</p>
         </div>
       `,
       '测试已暂停，点击按钮继续本轮',
@@ -378,7 +402,7 @@
         <div class="stage-face stage-face--complete">
           <p class="stage-kicker">TEST COMPLETE</p>
           <p class="stage-ms">${avgMs}<small>ms</small></p>
-          <p class="stage-sub">5 轮平均反应</p>
+          <p class="stage-progress">当前 5/5 次</p><p class="stage-sub">5 轮平均反应</p>
           <span class="stage-tier">${tier.name}</span>
         </div>
       `,
@@ -468,6 +492,7 @@
     const previousBest = getPersonalBest();
 
     state.result = {
+      submissionId: crypto.randomUUID(),
       avgMs,
       bestMs,
       worstMs,
@@ -484,6 +509,7 @@
     const isNewBest = previousBest === null || avgMs < previousBest;
     populateResultSheet(tier, isNewBest);
     showResultSheet();
+    if (WEBSITE_MODE && account) void handleSubmit({ preventDefault() {} });
     announce(`测试完成，平均 ${avgMs} 毫秒，${tier.name}。成绩已保存到本地。`);
 
     later(() => {
@@ -503,7 +529,7 @@
     els.submitSuccess.hidden = true;
     els.nickname.disabled = false;
     els.submitBtn.disabled = false;
-    els.submitBtnLabel.textContent = '提交到排行榜';
+    els.submitBtnLabel.textContent = WEBSITE_MODE ? (account ? '上传 / 重试' : '登录后上榜') : '提交到排行榜';
     els.nickname.value = loadNickname();
     els.submitNote.className = 'form-note';
     updateSubmitNote();
@@ -577,6 +603,11 @@
 
   function updateSubmitNote() {
     if (!state.result || state.submitted || els.submitForm.hidden) return;
+    if (WEBSITE_MODE) {
+      setSubmitNote(account ? `使用 ${account.name} 自动上传本次五轮成绩，点击榜单玩家可查看主页。` : '本地成绩已保存，登录后才可上传排行榜。');
+      els.submitBtnLabel.textContent = account ? '上传 / 重试' : '登录后上榜';
+      return;
+    }
     if (state.online === false) {
       setSubmitNote('排行榜当前离线，成绩已保存在本地。恢复连接后可再次提交。', 'warn');
     } else {
@@ -775,10 +806,16 @@
 
       const playerCell = document.createElement('td');
       playerCell.className = 'col-player';
-      const playerName = document.createElement('span');
+      const profilePath = typeof entry.profilePath === 'string' && /^\/players\/(?:[0-9]+|[0-9a-f-]{36})$/i.test(entry.profilePath) ? entry.profilePath : null;
+      const playerName = document.createElement(profilePath ? 'a' : 'span');
+      if (profilePath) { playerName.href = profilePath; if (WEBSITE_MODE) playerName.target = '_top'; }
       playerName.className = 'player-name';
       playerName.textContent = entry.name;
       playerName.title = entry.name;
+      if (typeof entry.avatarUrl === 'string' && /^\/uploads\/[A-Za-z0-9/_.-]+$/.test(entry.avatarUrl) && !entry.avatarUrl.includes('..')) {
+        const avatar = document.createElement('img'); avatar.src = entry.avatarUrl; avatar.alt = ''; avatar.className = 'board-avatar'; avatar.loading = 'lazy';
+        avatar.addEventListener('error', () => avatar.remove(), { once: true }); playerCell.append(avatar);
+      }
       playerCell.append(playerName);
       if (isSelf) {
         const tag = document.createElement('span');
@@ -855,14 +892,20 @@
     event.preventDefault();
     if (!state.result || state.submitted || els.submitBtn.disabled) return;
 
-    const name = els.nickname.value.trim();
+    if (WEBSITE_MODE && !account) {
+      if (parent !== window) parent.postMessage({ type: 'yuz1-reaction-login' }, location.origin);
+      else location.assign('/login?redirect=/tools/reaction');
+      return;
+    }
+    const run = state.result;
+    const name = WEBSITE_MODE ? account.name : els.nickname.value.trim();
     const nameLength = Array.from(name).length;
     if (nameLength < 1) {
       setSubmitNote('请输入昵称后再提交。', 'error');
       els.nickname.focus();
       return;
     }
-    if (nameLength > 16) {
+    if (!WEBSITE_MODE && nameLength > 16) {
       setSubmitNote('昵称最多 16 个字符。', 'error');
       els.nickname.focus();
       return;
@@ -871,11 +914,12 @@
     setSubmitting(true);
     setSubmitNote('正在提交，请稍候…');
     try {
-      const data = await apiRequest('/api/scores', {
+      const data = WEBSITE_MODE ? await parentRequest(run) : await apiRequest('/api/scores', {
         method: 'POST',
         body: JSON.stringify({ name, rounds: state.result.rounds }),
       });
 
+      if (state.result !== run) return;
       state.submitted = true;
       state.lastScoreId = Number(data.score?.id) || null;
       state.boardTotal = Number(data.total) || state.boardTotal;
@@ -890,6 +934,7 @@
       loadBoard({ silent: true });
       showToast('成绩已提交到排行榜。', 'success');
     } catch (error) {
+      if (state.result !== run) return;
       if (error instanceof HttpError) {
         setSubmitNote(error.message, 'error');
       } else {
@@ -897,7 +942,7 @@
         setSubmitNote('无法连接服务器，本局成绩仍保存在本地。请启动服务后重试。', 'error');
       }
     } finally {
-      setSubmitting(false);
+      if (state.result === run) setSubmitting(false);
     }
   }
 
@@ -914,6 +959,9 @@
     if (state.phase === 'idle') {
       startSession();
       return;
+    }
+    if (['result', 'early', 'paused'].includes(state.phase)) {
+      event.preventDefault(); beginRound(); return;
     }
     if (state.phase === 'waiting' || state.phase === 'ready') {
       event.preventDefault();
@@ -938,6 +986,9 @@
       startSession();
       return;
     }
+    if (['result', 'early', 'paused'].includes(state.phase)) {
+      event.preventDefault(); beginRound(); return;
+    }
     if (state.phase === 'waiting' || state.phase === 'ready') {
       event.preventDefault();
       respond();
@@ -954,14 +1005,6 @@
   document.addEventListener('visibilitychange', () => { if (document.hidden) pauseActiveRound(); });
   window.addEventListener('blur', pauseActiveRound);
   window.addEventListener('pagehide', () => { pauseActiveRound(); clearTimers(); });
-  els.nextBtn.addEventListener('click', () => {
-    if (['result', 'early', 'paused'].includes(state.phase)) {
-      els.stage.scrollIntoView({ block: 'center', behavior: 'instant' });
-      els.stage.focus({ preventScroll: true });
-      beginRound();
-    }
-  });
-
   els.resetBtn.addEventListener('click', () => {
     resetTest();
     els.stage.focus({ preventScroll: true });
@@ -1026,6 +1069,8 @@
       state.testVisible = true;
     }
 
+    if (WEBSITE_MODE && parent !== window) parent.postMessage({ type: 'yuz1-reaction-ready' }, location.origin);
+    if (WEBSITE_MODE) { els.nickname.hidden = true; els.nickname.required = false; els.nickname.closest('form').querySelector('label').hidden = true; document.querySelector('.result-submit-copy').textContent = '登录后，完整五轮成绩自动使用本站账号上传。'; }
     loadBoard();
   }
 

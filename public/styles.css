@@ -2723,3 +2723,8 @@ html[data-theme="light"] .stage-chrome { color:var(--muted); }
 @media(prefers-reduced-motion:reduce) { .hero-visual { animation:none; opacity:1; transform:none; } }
 
 .brand-name { font-family:var(--font-body); font-weight:700; }
+
+.stage-progress { font-size:14px; color:var(--muted); margin:6px 0; }
+.player-name[href] { color:inherit; text-decoration:underline; text-underline-offset:4px; }
+
+.board-avatar { width:24px; height:24px; object-fit:cover; border-radius:50%; vertical-align:middle; margin-right:8px; }

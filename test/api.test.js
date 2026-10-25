@@ -5,7 +5,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createApp } from '../src/app.js';
-import { openDatabase } from '../src/db.js';
+import { openDatabase, createScoreStore } from '../src/db.js';
+import { DatabaseSync } from 'node:sqlite';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const PUBLIC_DIR = path.join(ROOT, 'public');
@@ -17,6 +18,8 @@ async function startApp(overrides = {}) {
     db,
     publicDir: PUBLIC_DIR,
     adminToken: overrides.adminToken ?? 'test-secret',
+    websiteKey: overrides.websiteKey ?? '',
+    requireAccount: overrides.requireAccount ?? false,
     trustProxy: overrides.trustProxy ?? false,
     rateLimit: overrides.rateLimit ?? { max: 1000, windowMs: 60_000 },
   });
@@ -214,4 +217,40 @@ test('a full IP registry does not reset active submission limits', async (t) => 
   assert.equal(overflow.headers.get('retry-after'), '60');
   assert.equal((await post('192.0.2.1')).status, 429);
   assert.equal((await json(await fetch(`${fixture.url}/api/leaderboard`))).total, 2);
+});
+
+const WEBSITE_KEY = 'trusted-website-key-' + 'x'.repeat(32);
+const ACCOUNT = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: '登录玩家', profilePath: '/players/101', avatarUrl: '/uploads/avatars/test.webp' };
+const RUN = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+function accountSubmit(url, body, key = WEBSITE_KEY) {
+  return fetch(url + '/api/scores', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Website-Key': key }, body: JSON.stringify(body) });
+}
+test('website mode refuses unauthenticated or malformed account submissions', async t => {
+  const f = await startApp({ websiteKey: WEBSITE_KEY, requireAccount: true }); t.after(() => f.close());
+  const valid = { account: ACCOUNT, submissionId: RUN, rounds: [200, 210, 220, 230, 240] };
+  assert.equal((await accountSubmit(f.url, valid, '')).status, 403);
+  assert.equal((await accountSubmit(f.url, valid, 'wrong')).status, 403);
+  assert.equal((await accountSubmit(f.url, { name: '伪造', rounds: valid.rounds })).status, 400);
+  assert.equal((await accountSubmit(f.url, { ...valid, account: { ...ACCOUNT, profilePath: 'javascript:alert(1)' } })).status, 400);
+  assert.equal((await json(await fetch(f.url + '/api/leaderboard'))).total, 0);
+});
+test('identified submissions retain profile links, recompute data and deduplicate retries', async t => {
+  const f = await startApp({ websiteKey: WEBSITE_KEY }); t.after(() => f.close());
+  const payload = { account: ACCOUNT, submissionId: RUN, rounds: [200, 210, 220, 230, 240], avgMs: 1 };
+  const first = await accountSubmit(f.url, payload); assert.equal(first.status, 201);
+  const saved = await first.json(); assert.equal(saved.score.avgMs, 220); assert.equal(saved.score.profilePath, '/players/101');
+  const replay = await accountSubmit(f.url, payload); assert.equal(replay.status, 200); assert.equal((await replay.json()).score.id, saved.score.id);
+  assert.equal((await accountSubmit(f.url, { ...payload, rounds: [250, 250, 250, 250, 250] })).status, 409);
+  const board = await json(await fetch(f.url + '/api/leaderboard'));
+  assert.equal(board.total, 1); assert.equal(board.entries[0].avatarUrl, ACCOUNT.avatarUrl); assert.equal(board.entries[0].profilePath, ACCOUNT.profilePath);
+});
+test('migrates old anonymous databases without deleting or misattributing historical scores', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yuzi-migration-'));
+  try {
+    const old = new DatabaseSync(path.join(dir, 'leaderboard.db'));
+    old.exec("CREATE TABLE scores(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,avg_ms INTEGER NOT NULL,best_ms INTEGER NOT NULL,rounds TEXT NOT NULL,created_at TEXT NOT NULL); INSERT INTO scores VALUES(1,'legacy',100,100,'[100,100,100,100,100]','2026-01-01T00:00:00.000Z');"); old.close();
+    let db = openDatabase(dir); assert.equal(createScoreStore(db, true).total(), 0); assert.equal(createScoreStore(db).total(), 1);
+    createScoreStore(db, true).add({ name: ACCOUNT.name, account: ACCOUNT, submissionId: RUN, rounds: [200,200,200,200,200], avgMs: 200, bestMs: 200, createdAt: new Date().toISOString() }); db.close();
+    db = openDatabase(dir); assert.equal(createScoreStore(db).total(), 2); assert.equal(createScoreStore(db, true).total(), 1); assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check, 'ok'); db.close();
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
