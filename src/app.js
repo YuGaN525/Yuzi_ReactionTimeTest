@@ -9,8 +9,9 @@ const MAX_ROUND_MS = 5000;
 const MIN_AVG_MS = 80;
 const MAX_AVG_MS = 3000;
 const MAX_NAME_LENGTH = 16;
-const DEFAULT_LIMIT = 50;
+const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 100;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const UNSAFE_NAME_CHARS = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff<>]/g;
 
@@ -164,7 +165,7 @@ export function createApp({
   });
 
   app.get('/api/leaderboard', (req, res) => {
-    const sort = req.query.sort === 'best' ? 'best' : 'avg';
+    const sort = !accountMode && req.query.sort === 'best' ? 'best' : 'avg';
     const requestedLimit = Number.parseInt(req.query.limit, 10);
     const limit = Number.isFinite(requestedLimit)
       ? Math.min(Math.max(requestedLimit, 1), MAX_LIMIT)
@@ -175,6 +176,42 @@ export function createApp({
       total: store.total(),
       entries: store.leaderboard(sort, limit),
     });
+  });
+
+  app.get('/api/leaderboard/accounts/:accountId', (req, res) => {
+    if (!UUID.test(req.params.accountId)) return res.status(400).json({ error: '账号标识无效。' });
+    const result = store.accountDetails(req.params.accountId);
+    return result ? res.json(result) : res.status(404).json({ error: '该账号暂无成绩。' });
+  });
+
+  app.use('/api/admin', (req, res, next) => {
+    if ((websiteKey && safeTokenEqual(req.get('x-website-key'), websiteKey)) || (adminToken && safeTokenEqual(req.get('x-admin-token'), adminToken))) return next();
+    return res.status(403).json({ error: '无权限管理排行榜。' });
+  });
+  app.get('/api/admin/scores', (req, res) => {
+    const page = Math.max(1, Math.min(100000, Number.parseInt(req.query.page, 10) || 1));
+    const pageSize = Math.max(1, Math.min(100, Number.parseInt(req.query.pageSize, 10) || 20));
+    const keyword = typeof req.query.keyword === 'string' ? req.query.keyword.slice(0, 64) : '';
+    const accountId = typeof req.query.accountId === 'string' ? req.query.accountId : null;
+    res.json(store.adminScores({ page, pageSize, keyword, accountId }));
+  });
+  app.put('/api/admin/scores/:id', (req, res) => {
+    const id = Number(req.params.id), version = req.body?.version;
+    const rounds = validateRounds(req.body?.rounds);
+    const name = req.body?.name === undefined ? undefined : cleanName(req.body.name, 64);
+    if (!Number.isSafeInteger(id) || id < 1 || !rounds || !Number.isSafeInteger(version) || version < 0 || name === null)
+      return res.status(400).json({ error: '请提交有效的五轮成绩、昵称及记录版本。' });
+    res.json(store.update(id, { ...rounds, version, name }));
+  });
+  app.delete('/api/admin/scores/:id', (req, res) => {
+    const id = Number(req.params.id), version = Number(req.query.version);
+    if (!Number.isSafeInteger(id) || id < 1 || req.query.version === undefined || !Number.isSafeInteger(version) || version < 0)
+      return res.status(400).json({ error: '成绩标识或版本无效。' });
+    return store.remove(id, version) ? res.sendStatus(204) : res.status(404).json({ error: '成绩不存在。' });
+  });
+  app.delete('/api/admin/accounts/:accountId/scores', (req, res) => {
+    if (!UUID.test(req.params.accountId)) return res.status(400).json({ error: '账号标识无效。' });
+    res.json({ removed: store.removeAccount(req.params.accountId) });
   });
 
   app.post('/api/scores', (req, res, next) => {
@@ -220,6 +257,8 @@ export function createApp({
       rank: saved.rank,
       percentile: saved.percentile,
       total: saved.total,
+      personalBest: saved.personalBest,
+      isPersonalBest: saved.isPersonalBest,
     });
   });
 
@@ -269,7 +308,7 @@ export function createApp({
     if (error instanceof SyntaxError && 'body' in error) {
       return res.status(400).json({ error: '请求格式无效。' });
     }
-    if (error?.status === 409) return res.status(409).json({ error: error.message });
+    if ([400, 404, 409].includes(error?.status)) return res.status(error.status).json({ error: error.message });
     console.error(error);
     return res.status(500).json({ error: '服务器内部错误。' });
   });

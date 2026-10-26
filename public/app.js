@@ -8,6 +8,18 @@
   const apiUrl = (path) => `${API_BASE}${API_PREFIX}${path.replace(/^\/api/, '')}`;
 
   const WEBSITE_MODE = API_PREFIX === '/api/tools/reaction';
+  const BOARD_MODE = new URLSearchParams(location.search).get('board') === '1';
+  document.body.classList.toggle('board-only', BOARD_MODE);
+  const fullBoardLink = document.getElementById('fullBoardLink');
+  if (fullBoardLink) {
+    fullBoardLink.hidden = BOARD_MODE;
+    if (WEBSITE_MODE) { fullBoardLink.href = '/tools/reaction/leaderboard'; fullBoardLink.target = '_top'; }
+  }
+  if (BOARD_MODE) document.getElementById('boardDescription').textContent = '前 100 位用户，按各自最佳平均反应排序。展开用户可查看其平均成绩最好的前 5 局及各局最快反应。';
+  let usageSessionId = crypto.randomUUID();
+  function reportUsage(action) {
+    if (WEBSITE_MODE && parent !== window) parent.postMessage({ type: 'yuz1-reaction-usage', action, sessionId: usageSessionId }, location.origin);
+  }
   let account = null;
   const submissions = new Map();
   function parentRequest(result) {
@@ -37,7 +49,7 @@
   const WAIT_MIN_MS = 1400;
   const WAIT_MAX_MS = 3800;
   const REQUEST_TIMEOUT_MS = 8000;
-  const BOARD_LIMIT = 50;
+  const BOARD_LIMIT = BOARD_MODE ? 100 : 10;
   const STORAGE_KEYS = {
     history: 'yuzi-rt.history.v1',
     nickname: 'yuzi-rt.nickname.v1',
@@ -438,6 +450,8 @@
   }
 
   function startSession() {
+    usageSessionId = crypto.randomUUID();
+    reportUsage('start');
     clearTimers();
     state.rounds = [];
     state.falseStarts = 0;
@@ -481,6 +495,7 @@
 
   function finishSession() {
     if (state.rounds.length !== TOTAL_ROUNDS) return;
+    reportUsage('complete');
     clearTimers();
 
     const rounds = [...state.rounds];
@@ -630,7 +645,9 @@
     els.submitForm.hidden = true;
     els.submitSuccess.hidden = false;
     els.submitResultText.textContent =
-      total <= 1
+      WEBSITE_MODE && data.personalBest && data.isPersonalBest === false
+        ? `本局成绩已保存，榜单保留你的最佳平均 ${data.personalBest.avgMs} ms（同局最快 ${data.personalBest.bestMs} ms），当前第 ${rank} 名。`
+        : total <= 1
         ? '你是第一位上榜的玩家，抢占先机。'
         : `当前排名第 ${rank} 名，击败了 ${percentile}% 的玩家（共 ${formatNumber(total)} 人）。`;
 
@@ -794,7 +811,7 @@
     const tbody = document.createElement('tbody');
     state.boardEntries.forEach((entry) => {
       const row = document.createElement('tr');
-      const isSelf = state.lastScoreId !== null && Number(entry.id) === Number(state.lastScoreId);
+      const isSelf = account?.id === entry.accountId || (state.lastScoreId !== null && Number(entry.id) === Number(state.lastScoreId));
       if (isSelf) row.classList.add('is-self');
 
       const rankCell = document.createElement('td');
@@ -837,6 +854,34 @@
       row.append(dateCell);
 
       tbody.append(row);
+      if (BOARD_MODE && typeof entry.accountId === 'string' && /^[0-9a-f-]{36}$/i.test(entry.accountId)) {
+        const toggle = document.createElement('button');
+        toggle.className = 'details-toggle'; toggle.type = 'button';
+        toggle.textContent = '展开前 5 局'; toggle.setAttribute('aria-expanded', 'false');
+        playerCell.append(toggle);
+        let detailsRow = null;
+        toggle.addEventListener('click', async () => {
+          if (detailsRow) { detailsRow.remove(); detailsRow = null; toggle.textContent = '展开前 5 局'; toggle.setAttribute('aria-expanded', 'false'); return; }
+          const expanded = document.createElement('tr'); detailsRow = expanded;
+          const cell = document.createElement('td'); cell.colSpan = 5; cell.className = 'session-details'; cell.textContent = '正在加载…'; expanded.append(cell);
+          row.after(expanded); toggle.disabled = true; toggle.setAttribute('aria-expanded', 'true'); toggle.textContent = '收起';
+          try {
+            const detail = await apiRequest(`/api/leaderboard/accounts/${encodeURIComponent(entry.accountId)}`);
+            if (!row.isConnected || detailsRow !== expanded) return;
+            const title = document.createElement('p'); title.textContent = `累计 ${Number(detail.total) || 0} 局 · 平均成绩最佳的前 5 局`;
+            const list = document.createElement('ol'); list.className = 'session-list';
+            for (const session of Array.isArray(detail.sessions) ? detail.sessions.slice(0, 5) : []) {
+              const item = document.createElement('li');
+              const label = document.createElement('strong'); label.textContent = `平均 ${session.avgMs} ms · 最快 ${session.bestMs} ms`;
+              const rounds = document.createElement('span'); rounds.textContent = `五轮：${Array.isArray(session.rounds) ? session.rounds.join(' / ') : '—'} ms`;
+              const time = document.createElement('span'); time.textContent = formatWhen(session.createdAt);
+              item.append(label, rounds, time); list.append(item);
+            }
+            cell.replaceChildren(title, list);
+          } catch { cell.textContent = '成绩明细加载失败，请收起后重新展开。'; }
+          finally { toggle.disabled = false; }
+        });
+      }
     });
     table.append(tbody);
     els.boardBody.replaceChildren(table);
@@ -866,7 +911,7 @@
       state.boardTotal = Number(data.total) || 0;
       setConnection('online');
       els.heroTotal.textContent = formatNumber(state.boardTotal);
-      els.boardCount.textContent = `${formatNumber(state.boardTotal)} 条成绩`;
+      els.boardCount.textContent = `${formatNumber(state.boardTotal)} 位用户`;
       renderBoard();
       updateSubmitNote();
     } catch {
@@ -921,12 +966,12 @@
 
       if (state.result !== run) return;
       state.submitted = true;
-      state.lastScoreId = Number(data.score?.id) || null;
+      state.lastScoreId = Number(data.personalBest?.id ?? data.score?.id) || null;
       state.boardTotal = Number(data.total) || state.boardTotal;
       saveNickname(name);
       setConnection('online');
       els.heroTotal.textContent = formatNumber(state.boardTotal);
-      els.boardCount.textContent = `${formatNumber(state.boardTotal)} 条成绩`;
+      els.boardCount.textContent = `${formatNumber(state.boardTotal)} 位用户`;
       showSubmitSuccess(data);
 
       state.boardSort = 'avg';

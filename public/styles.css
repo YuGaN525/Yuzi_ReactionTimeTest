@@ -2728,3 +2728,13 @@ html[data-theme="light"] .stage-chrome { color:var(--muted); }
 .player-name[href] { color:inherit; text-decoration:underline; text-underline-offset:4px; }
 
 .board-avatar { width:24px; height:24px; object-fit:cover; border-radius:50%; vertical-align:middle; margin-right:8px; }
+/* A dedicated, shareable top-100 view reuses the same trusted rendering. */
+.board-only .hero, .board-only #test, .board-only #guide { display: none; }
+.details-toggle { display: block; margin-top: 6px; color: var(--accent, #d4af37); background: transparent; border: 0; cursor: pointer; font: inherit; font-size: 11px; }
+.details-toggle:disabled { opacity: .5; cursor: wait; }
+.session-details { padding: 16px !important; white-space: normal; }
+.session-details p { margin: 0 0 12px; }
+.session-list { display: grid; gap: 10px; margin: 0; padding-left: 22px; }
+.session-list li { padding-left: 4px; }
+.session-list strong, .session-list span { display: block; margin-top: 4px; }
+.session-list span { font-size: 12px; color: var(--muted, #9ca3af); overflow-wrap: anywhere; }

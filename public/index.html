@@ -256,14 +256,13 @@
           <p class="section-index">02 / LEADERBOARD</p>
           <h2 id="boardTitle">反应排行榜</h2>
         </div>
-        <p class="section-desc">平均成绩越低越靠前。榜单展示前 50 名，只收录完整的 5 轮成绩。</p>
+        <p class="section-desc" id="boardDescription">每位用户只展示平均反应最好的成绩，最快反应取自同一局。这里展示前 10 位用户。</p>
       </div>
 
       <div class="board-card">
         <div class="board-toolbar">
           <div class="segmented" role="group" aria-label="排行榜排序">
             <button class="seg-btn is-active" type="button" data-sort="avg" aria-pressed="true">平均成绩</button>
-            <button class="seg-btn" type="button" data-sort="best" aria-pressed="false">单轮最快</button>
           </div>
           <div class="board-tools">
             <span class="board-count" id="boardCount">—</span>
@@ -285,7 +284,7 @@
 
         <div class="board-foot">
           <span>成绩按毫秒计算，越低越好</span>
-          <span>服务端复核 · 无需注册</span>
+          <a id="fullBoardLink" href="?board=1">详细反应排行榜 · 前 100 位用户 →</a>
         </div>
       </div>
     </section>

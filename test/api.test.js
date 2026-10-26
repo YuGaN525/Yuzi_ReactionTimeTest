@@ -7,6 +7,64 @@ import { fileURLToPath } from 'node:url';
 import { createApp } from '../src/app.js';
 import { openDatabase, createScoreStore } from '../src/db.js';
 import { DatabaseSync } from 'node:sqlite';
+import { randomUUID } from 'node:crypto';
+
+test('website board keeps one lowest-average session per user and the fastest from that same session', async t => {
+  const fixture = await startApp({ websiteKey: WEBSITE_KEY }); t.after(() => fixture.close());
+  const runs = [[80,500,500,500,500], [210,210,210,210,210], [190,200,210,200,200],
+    [220,220,220,220,220], [230,230,230,230,230], [240,240,240,240,240], [250,250,250,250,250]];
+  for (const rounds of runs) {
+    const response = await accountSubmit(fixture.url, { account: ACCOUNT, submissionId: randomUUID(), rounds });
+    assert.equal(response.status, 201);
+    const body = await response.json(); assert.equal(body.total, 1); assert.equal(body.rank, 1);
+  }
+  const board = await json(await fetch(fixture.url + '/api/leaderboard?sort=best'));
+  assert.equal(board.sort, 'avg'); assert.equal(board.entries.length, 1);
+  assert.equal(board.entries[0].avgMs, 200); assert.equal(board.entries[0].bestMs, 190);
+  const details = await json(await fetch(fixture.url + '/api/leaderboard/accounts/' + ACCOUNT.id));
+  assert.equal(details.total, 7); assert.equal(details.sessions.length, 5);
+  assert.deepEqual(details.sessions.map(s => s.avgMs), [200,210,220,230,240]);
+  assert.equal(details.sessions[0].bestMs, 190); assert.equal(details.sessions[0].rounds.length, 5);
+});
+
+test('preview returns ten users, full leaderboard at most one hundred, and totals count users', async t => {
+  const fixture = await startApp({ websiteKey: WEBSITE_KEY }); t.after(() => fixture.close());
+  for (let i = 0; i < 103; i++) {
+    const id = randomUUID();
+    await accountSubmit(fixture.url, { account: { ...ACCOUNT, id, name: 'Player ' + i }, submissionId: randomUUID(), rounds: Array(5).fill(180 + i) });
+  }
+  const preview = await json(await fetch(fixture.url + '/api/leaderboard'));
+  assert.equal(preview.entries.length, 10); assert.equal(preview.total, 103);
+  const full = await json(await fetch(fixture.url + '/api/leaderboard?limit=1000'));
+  assert.equal(full.entries.length, 100); assert.equal(new Set(full.entries.map(e => e.accountId)).size, 100);
+  assert.equal((await fetch(fixture.url + '/api/leaderboard/accounts/not-an-account')).status, 400);
+  assert.equal((await fetch(fixture.url + '/api/leaderboard/accounts/' + randomUUID())).status, 404);
+});
+
+test('administration validates rounds, protects versions, recomputes ranking, and can remove user history', async t => {
+  const fixture = await startApp({ websiteKey: WEBSITE_KEY }); t.after(() => fixture.close());
+  for (const ms of [200,250,300]) await accountSubmit(fixture.url, { account: ACCOUNT, submissionId: randomUUID(), rounds: Array(5).fill(ms) });
+  const endpoint = fixture.url + '/api/admin/scores';
+  assert.equal((await fetch(endpoint)).status, 403);
+  assert.equal((await fetch(endpoint, { headers: { 'X-Website-Key': 'wrong-key' } })).status, 403);
+  const headers = { 'X-Website-Key': WEBSITE_KEY, 'Content-Type': 'application/json' };
+  const list = await json(await fetch(endpoint, { headers }));
+  assert.equal(list.total, 3); assert.equal(list.items.length, 3);
+  const row = list.items.find(s => s.avgMs === 200);
+  const invalid = await fetch(endpoint + '/' + row.id, { method: 'PUT', headers, body: JSON.stringify({ rounds: [1], version: row.version }) });
+  assert.equal(invalid.status, 400);
+  const edited = await fetch(endpoint + '/' + row.id, { method: 'PUT', headers,
+    body: JSON.stringify({ name: 'Corrected player', rounds: [300,310,320,330,340], avgMs: 1, version: row.version }) });
+  assert.equal(edited.status, 200); assert.equal((await edited.json()).avgMs, 320);
+  assert.equal((await fetch(endpoint + '/' + row.id, { method: 'PUT', headers, body: JSON.stringify({ rounds: Array(5).fill(200), version: row.version }) })).status, 409);
+  assert.equal((await fetch(endpoint + '/' + row.id + '?version=0', { method: 'DELETE', headers })).status, 409);
+  let board = await json(await fetch(fixture.url + '/api/leaderboard'));
+  assert.equal(board.entries[0].avgMs, 250);
+  assert.equal((await fetch(endpoint + '/' + row.id + '?version=1', { method: 'DELETE', headers })).status, 204);
+  const removed = await json(await fetch(fixture.url + '/api/admin/accounts/' + ACCOUNT.id + '/scores', { method: 'DELETE', headers }));
+  assert.equal(removed.removed, 2);
+  board = await json(await fetch(fixture.url + '/api/leaderboard')); assert.equal(board.total, 0);
+});
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const PUBLIC_DIR = path.join(ROOT, 'public');
