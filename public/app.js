@@ -200,7 +200,8 @@
     const value = readStorage(STORAGE_KEYS.history, []);
     if (!Array.isArray(value)) return [];
     return value
-      .filter((item) => item && Number.isFinite(item.avgMs) && item.avgMs > 0)
+      .filter((item) => item && Number.isFinite(item.avgMs) && item.avgMs >= 80
+        && Array.isArray(item.rounds) && item.rounds.length === TOTAL_ROUNDS && item.rounds.every(ms => Number.isFinite(ms) && ms >= 80))
       .slice(0, 30);
   }
 
@@ -306,7 +307,7 @@
     }
     els.roundLabel.textContent = label;
 
-    const sessionInProgress = !['idle', 'complete'].includes(state.phase);
+    const sessionInProgress = !['idle', 'complete', 'cancelled'].includes(state.phase);
     els.resetBtn.hidden = !sessionInProgress;
   }
 
@@ -472,7 +473,14 @@
 
     const respondedAt = performance.now();
     clearTimers();
-    const ms = Math.max(1, Math.round(respondedAt - state.readyAt));
+    const elapsed = respondedAt - state.readyAt;
+    if (elapsed < 80) {
+      resetTest();
+      setStage('cancelled', `<div class="stage-face stage-face--early"><p class="stage-kicker">PREDICTION</p><h3>成绩已取消</h3><p class="stage-sub">反应低于80ms，视为预测。点击此区域重新开始五轮测试。</p></div>`, '检测到预测，整次成绩取消，点击重新开始');
+      announce('反应低于80毫秒，整次成绩取消，不会保存或上传。');
+      return;
+    }
+    const ms = Math.round(elapsed);
     state.readyAt = 0;
     state.rounds.push(ms);
     renderRoundResult(ms);
@@ -487,6 +495,11 @@
   function handleEarlyStart() {
     clearTimers();
     state.falseStarts += 1;
+    if (state.falseStarts > 5) {
+      startSession();
+      announce('抢跑超过5次，已清空本次成绩并重新开始五轮测试。');
+      return;
+    }
     renderEarly();
     updateMetrics();
     state.readyAt = 0;
@@ -1001,7 +1014,7 @@
 
   els.stage.addEventListener('pointerdown', (event) => {
     if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
-    if (state.phase === 'idle') {
+    if (state.phase === 'idle' || state.phase === 'cancelled') {
       startSession();
       return;
     }
@@ -1025,7 +1038,7 @@
     const active = document.activeElement;
     if (active && active !== els.stage && isInteractiveElement(active)) return;
 
-    if (state.phase === 'idle') {
+    if (state.phase === 'idle' || state.phase === 'cancelled') {
       if (!state.testVisible) return;
       event.preventDefault();
       startSession();

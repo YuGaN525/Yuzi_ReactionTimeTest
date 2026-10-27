@@ -52,7 +52,7 @@ export function createScoreStore(db, accountOnly = false) {
         PARTITION BY COALESCE(account_id, 'anonymous:' || id)
         ORDER BY ${metric}, avg_ms, best_ms, created_at, id
       ) AS account_row
-      FROM scores ${accountOnly ? 'WHERE account_id IS NOT NULL' : ''}
+      FROM scores WHERE best_ms >= 80 ${accountOnly ? 'AND account_id IS NOT NULL' : ''}
     ), winners AS (SELECT * FROM ordered WHERE account_row=1)` };
   }
   function board(sort, limit) {
@@ -68,6 +68,8 @@ export function createScoreStore(db, accountOnly = false) {
 
   return {
     add({ name, rounds, avgMs, bestMs, createdAt, account = null, submissionId = null }) {
+      if (!Array.isArray(rounds) || rounds.some(ms => !Number.isFinite(ms) || ms < 80) || bestMs < 80)
+        fail(400, '最快反应低于80毫秒，整次成绩无效。');
       const previous = account && submissionId
         ? db.prepare('SELECT * FROM scores WHERE account_id=? AND submission_id=?').get(account.id, submissionId) : null;
       if (previous && previous.rounds !== JSON.stringify(rounds)) fail(409, '同一次测试不能重复提交不同成绩。');
@@ -89,10 +91,10 @@ export function createScoreStore(db, accountOnly = false) {
     leaderboard: board,
     total,
     accountDetails(accountId) {
-      const rows = db.prepare('SELECT * FROM scores WHERE account_id=? ORDER BY avg_ms, best_ms, created_at, id LIMIT 5').all(accountId);
+      const rows = db.prepare('SELECT * FROM scores WHERE account_id=? AND best_ms>=80 ORDER BY avg_ms, best_ms, created_at, id LIMIT 5').all(accountId);
       if (!rows.length) return null;
       return { accountId, name: rows[0].name,
-        total: Number(db.prepare('SELECT COUNT(*) AS total FROM scores WHERE account_id=?').get(accountId).total),
+        total: Number(db.prepare('SELECT COUNT(*) AS total FROM scores WHERE account_id=? AND best_ms>=80').get(accountId).total),
         sessions: rows.map(row => score(row, true)) };
     },
     adminScores({ page = 1, pageSize = 20, keyword = '', accountId = null }) {

@@ -4,7 +4,7 @@ import express from 'express';
 import { createScoreStore } from './db.js';
 
 const ROUND_COUNT = 5;
-const MIN_ROUND_MS = 50;
+const MIN_ROUND_MS = 80;
 const MAX_ROUND_MS = 5000;
 const MIN_AVG_MS = 80;
 const MAX_AVG_MS = 3000;
@@ -31,7 +31,7 @@ function validateRounds(value) {
   if (!Array.isArray(value) || value.length !== ROUND_COUNT) return null;
   const rounds = [];
   for (const entry of value) {
-    if (typeof entry !== 'number' || !Number.isFinite(entry)) return null;
+    if (typeof entry !== 'number' || !Number.isFinite(entry) || entry < MIN_ROUND_MS) return null;
     const ms = Math.round(entry);
     if (ms < MIN_ROUND_MS || ms > MAX_ROUND_MS) return null;
     rounds.push(ms);
@@ -229,7 +229,7 @@ export function createApp({
 
     const validated = validateRounds(req.body?.rounds);
     if (!validated) {
-      return res.status(400).json({ error: '请提交 5 轮有效成绩，每轮需在 50–5000 毫秒之间。' });
+      return res.status(400).json({ error: '最快反应低于80毫秒视为预测，整次成绩无效。请提交每轮80–5000毫秒的五轮成绩。' });
     }
 
     const createdAt = new Date().toISOString();

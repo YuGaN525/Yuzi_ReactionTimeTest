@@ -69,6 +69,26 @@ test('administration validates rounds, protects versions, recomputes ranking, an
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const PUBLIC_DIR = path.join(ROOT, 'public');
 
+test('prediction invalidates the whole session, preserves the 80ms boundary and excludes legacy predictions', async t => {
+  const f = await startApp({ websiteKey: WEBSITE_KEY }); t.after(() => f.close());
+  for (const ms of [0, 50, 79, 79.99]) {
+    assert.equal((await accountSubmit(f.url, { account: ACCOUNT, submissionId: randomUUID(), rounds: [ms, 200, 200, 200, 200] })).status, 400);
+  }
+  assert.equal((await accountSubmit(f.url, { account: ACCOUNT, submissionId: randomUUID(), rounds: [80, 200, 200, 200, 200] })).status, 201);
+  f.db.prepare('INSERT INTO scores(name, avg_ms, best_ms, rounds, created_at, account_id) VALUES(?,?,?,?,?,?)')
+    .run('legacy prediction', 95, 75, '[75,100,100,100,100]', new Date().toISOString(), ACCOUNT.id);
+  const board = await json(await fetch(f.url + '/api/leaderboard'));
+  assert.equal(board.total, 1); assert.equal(board.entries[0].bestMs, 80);
+  const details = await json(await fetch(f.url + '/api/leaderboard/accounts/' + ACCOUNT.id));
+  assert.equal(details.total, 1); assert.equal(details.sessions.length, 1);
+  const admin = await json(await fetch(f.url + '/api/admin/scores', { headers: { 'X-Website-Key': WEBSITE_KEY } }));
+  assert.equal(admin.total, 2); // Retain invalid historical evidence for administrators.
+  const valid = admin.items.find(s => s.bestMs === 80);
+  assert.equal((await fetch(f.url + '/api/admin/scores/' + valid.id, { method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-Website-Key': WEBSITE_KEY },
+    body: JSON.stringify({ version: valid.version, rounds: [79, 200, 200, 200, 200] }) })).status, 400);
+});
+
 async function startApp(overrides = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yuzi-rt-test-'));
   const db = openDatabase(dataDir);
@@ -87,6 +107,7 @@ async function startApp(overrides = {}) {
   const { port } = server.address();
 
   return {
+    db,
     url: `http://127.0.0.1:${port}`,
     async close() {
       await new Promise((resolve, reject) => {
